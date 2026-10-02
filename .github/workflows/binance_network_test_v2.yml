@@ -1,0 +1,94 @@
+name: Binance Network Test V2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-binance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install requests websocket-client
+
+      - name: Test Binance endpoints
+        run: |
+          python - <<'PY'
+          import requests
+          import websocket
+          import json
+          import time
+
+          print("\n========== ETH DATA SOURCE TEST V2 ==========\n")
+
+          tests = [
+              (
+                  "Binance Futures REST",
+                  "https://fapi.binance.com/fapi/v1/ticker/price?symbol=ETHUSDT"
+              ),
+              (
+                  "Binance Futures Mark Price",
+                  "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=ETHUSDT"
+              ),
+              (
+                  "Binance Spot Data API",
+                  "https://data-api.binance.vision/api/v3/ticker/price?symbol=ETHUSDT"
+              ),
+          ]
+
+          for name, url in tests:
+              print(f"\n--- {name} ---")
+              try:
+                  r = requests.get(url, timeout=10)
+                  print("HTTP:", r.status_code)
+                  print("Response:", r.text[:500])
+              except Exception as e:
+                  print("ERROR:", repr(e))
+
+          print("\n--- Binance USD-M Futures WebSocket ---")
+
+          ws_urls = [
+              "wss://fstream.binance.com/ws/ethusdt@aggTrade",
+              "wss://fstream.binance.com/ws/ethusdt@markPrice",
+          ]
+
+          for url in ws_urls:
+              print("\nTesting:", url)
+
+              try:
+                  ws = websocket.create_connection(
+                      url,
+                      timeout=10
+                  )
+
+                  msg = ws.recv()
+
+                  print("CONNECTED")
+                  print("Message:", msg[:1000])
+
+                  try:
+                      data = json.loads(msg)
+
+                      if "p" in data:
+                          print("ETH Price:", data["p"])
+
+                  except Exception:
+                      pass
+
+                  ws.close()
+
+              except Exception as e:
+                  print("FAILED:", repr(e))
+
+          print("\n========== TEST FINISHED ==========")
+          PY
